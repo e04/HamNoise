@@ -4,7 +4,7 @@ Neural network noise reduction for ham radio, supporting CW and voice modes such
 
 ## Web Demo
 
-https://e04.github.io/hamnoise/
+https://e04.github.io/HamNoise/
 
 ## Sample Audio
 

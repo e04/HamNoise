@@ -1,0 +1,62 @@
+name: Deploy web to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - web/**
+      - .github/workflows/deploy-web.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Emscripten
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y emscripten
+
+      - name: Build WebAssembly
+        run: make -C web clean all
+
+      - name: Prepare Pages artifact
+        run: |
+          mkdir -p _site
+          cp web/index.html _site/
+          cp web/styles.css _site/
+          cp web/app.js _site/
+          cp web/denoise-worklet.js _site/
+          cp web/denoise.wasm _site/
+          touch _site/.nojekyll
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

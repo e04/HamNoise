@@ -4,12 +4,43 @@
 #include <stddef.h>
 #include <string.h>
 
+#ifndef DENOISE_RESTRICT
+#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L)
+#define DENOISE_RESTRICT restrict
+#else
+#define DENOISE_RESTRICT
+#endif
+#endif
+
 enum {
     DENOISE_GATE_RESET = 0,
     DENOISE_GATE_UPDATE = 1,
     DENOISE_GATE_NEW = 2,
 };
 
+#if defined(DENOISE_FAST_ACTIVATION) && DENOISE_FAST_ACTIVATION
+static float denoise_fast_tanh(float x)
+{
+    if (x <= -3.0f) {
+        return -1.0f;
+    }
+    if (x >= 3.0f) {
+        return 1.0f;
+    }
+    const float x2 = x * x;
+    return (x * (27.0f + x2)) / (27.0f + (9.0f * x2));
+}
+
+static float denoise_sigmoid(float x)
+{
+    return 0.5f + (0.5f * denoise_fast_tanh(0.5f * x));
+}
+
+static float denoise_tanh(float x)
+{
+    return denoise_fast_tanh(x);
+}
+#else
 static float denoise_sigmoid(float x)
 {
     if (x >= 0.0f) {
@@ -20,18 +51,24 @@ static float denoise_sigmoid(float x)
     return z / (1.0f + z);
 }
 
+static float denoise_tanh(float x)
+{
+    return tanhf(x);
+}
+#endif
+
 static float denoise_silu(float x)
 {
     return x * denoise_sigmoid(x);
 }
 
 static void denoise_layer_norm(
-    const float *input,
-    const float *weight,
-    const float *bias,
+    const float *DENOISE_RESTRICT input,
+    const float *DENOISE_RESTRICT weight,
+    const float *DENOISE_RESTRICT bias,
     size_t size,
     float eps,
-    float *output
+    float *DENOISE_RESTRICT output
 )
 {
     float mean = 0.0f;
@@ -54,18 +91,25 @@ static void denoise_layer_norm(
 }
 
 static void denoise_linear(
-    const float *weight,
-    const float *bias,
-    const float *input,
+    const float *DENOISE_RESTRICT weight,
+    const float *DENOISE_RESTRICT bias,
+    const float *DENOISE_RESTRICT input,
     size_t output_size,
     size_t input_size,
-    float *output
+    float *DENOISE_RESTRICT output
 )
 {
     for (size_t out = 0; out < output_size; ++out) {
         const float *row = weight + (out * input_size);
         float acc = bias[out];
-        for (size_t in = 0; in < input_size; ++in) {
+        size_t in = 0;
+        for (; (in + 3U) < input_size; in += 4U) {
+            acc += row[in] * input[in];
+            acc += row[in + 1U] * input[in + 1U];
+            acc += row[in + 2U] * input[in + 2U];
+            acc += row[in + 3U] * input[in + 3U];
+        }
+        for (; in < input_size; ++in) {
             acc += row[in] * input[in];
         }
         output[out] = acc;
@@ -108,10 +152,12 @@ int denoise_gru_step(
     float gains[DENOISE_INPUT_BINS]
 )
 {
+#if !defined(DENOISE_SKIP_RUNTIME_MODEL_VALIDATE) || !DENOISE_SKIP_RUNTIME_MODEL_VALIDATE
     const int validation = denoise_model_validate(model);
     if (validation != 0) {
         return validation;
     }
+#endif
     if (state == NULL || features == NULL || gains == NULL) {
         return -5;
     }
@@ -149,7 +195,7 @@ int denoise_gru_step(
 
         const float reset_gate = denoise_sigmoid(state->gates_ih[reset_index] + state->gates_hh[reset_index]);
         const float update_gate = denoise_sigmoid(state->gates_ih[update_index] + state->gates_hh[update_index]);
-        const float new_gate = tanhf(state->gates_ih[new_index] + (reset_gate * state->gates_hh[new_index]));
+        const float new_gate = denoise_tanh(state->gates_ih[new_index] + (reset_gate * state->gates_hh[new_index]));
         state->next_hidden[i] = ((1.0f - update_gate) * new_gate) + (update_gate * state->hidden[i]);
     }
     memcpy(state->hidden, state->next_hidden, sizeof(state->hidden));

@@ -9,4 +9,7 @@ managed_components/
 sdkconfig
 sdkconfig.old
 
-rp2350/
+.emscripten-cache
+
+rp2350/board/
+rp2350/*.md

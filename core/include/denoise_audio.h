@@ -12,11 +12,14 @@ extern "C" {
 
 typedef struct {
     float window[DENOISE_FFT_LENGTH];
+    float window_sq[DENOISE_FFT_LENGTH];
+    float edge_fade[DENOISE_INPUT_BINS];
     float input_fifo[DENOISE_FFT_LENGTH + DENOISE_HOP_LENGTH];
     float fft_re[DENOISE_FFT_LENGTH];
     float fft_im[DENOISE_FFT_LENGTH];
     float ola[DENOISE_FFT_LENGTH];
     float ola_norm[DENOISE_FFT_LENGTH];
+    float frame_out[DENOISE_FFT_LENGTH];
     float features[DENOISE_INPUT_BINS];
     float magnitude[DENOISE_INPUT_BINS];
     float band_re[DENOISE_INPUT_BINS];

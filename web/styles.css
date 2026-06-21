@@ -38,6 +38,13 @@ h1 {
   letter-spacing: 0;
 }
 
+.repo-link {
+  display: inline-block;
+  margin-top: 4px;
+  color: var(--text);
+  font-size: 14px;
+}
+
 .status-pill {
   min-width: 96px;
   padding: 6px 10px;
@@ -164,7 +171,7 @@ input[type="range"] {
 .scope-grid {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 18px;
 }
 

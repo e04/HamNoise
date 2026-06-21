@@ -29,7 +29,10 @@ const inputSources = {
   browserTab: "browser-tab",
 };
 
-gainControl.value = "1";
+const settingsKey = "hamnoise.webSettings.v1";
+let savedSettings = loadSettings();
+
+restoreStaticSettings();
 
 class WaterfallScope {
   constructor(canvas) {
@@ -50,7 +53,6 @@ class WaterfallScope {
     this.samples = [];
     this.ctx.fillStyle = "#05070a";
     this.ctx.fillRect(0, 0, width, height);
-    this.drawGrid();
   }
 
   append(samples, sampleRate) {
@@ -68,12 +70,13 @@ class WaterfallScope {
 
   drawFrame(frame, sampleRate) {
     const { width, height } = this.canvas;
-    this.ctx.drawImage(this.canvas, 0, 1, width, height - 1, 0, 0, width, height - 1);
+    this.ctx.drawImage(this.canvas, 1, 0, width - 1, height, 0, 0, width - 1, height);
 
     const magnitudes = this.calculateMagnitudes(frame, sampleRate);
-    const y = height - 1;
-    for (let x = 0; x < width; x += 1) {
-      const index = Math.floor((x / Math.max(1, width - 1)) * (magnitudes.length - 1));
+    const x = width - 1;
+    for (let y = 0; y < height; y += 1) {
+      const frequencyPosition = 1 - (y / Math.max(1, height - 1));
+      const index = Math.floor(frequencyPosition * (magnitudes.length - 1));
       this.ctx.fillStyle = this.colorForLevel(magnitudes[index]);
       this.ctx.fillRect(x, y, 1, 1);
     }
@@ -119,18 +122,6 @@ class WaterfallScope {
     return `rgb(${r}, ${g}, ${blue})`;
   }
 
-  drawGrid() {
-    const { width, height } = this.canvas;
-    this.ctx.strokeStyle = "rgba(255, 255, 255, 0.16)";
-    this.ctx.lineWidth = 1;
-    for (let i = 1; i < 4; i += 1) {
-      const x = Math.round((width * i) / 4) + 0.5;
-      this.ctx.beginPath();
-      this.ctx.moveTo(x, 0);
-      this.ctx.lineTo(x, height);
-      this.ctx.stroke();
-    }
-  }
 }
 
 const inputScope = new WaterfallScope(inputScopeCanvas);
@@ -161,12 +152,12 @@ async function enumerateDevices() {
   const inputs = devices.filter((device) => device.kind === "audioinput");
   const outputs = devices.filter((device) => device.kind === "audiooutput");
 
-  fillSelect(inputSelect, inputs, "Default input");
-  fillSelect(outputSelect, outputs, "Default output");
+  fillSelect(inputSelect, inputs, "Default input", savedSettings.inputDeviceId);
+  fillSelect(outputSelect, outputs, "Default output", savedSettings.outputDeviceId);
   outputSelect.disabled = !canSelectOutputDevice();
 }
 
-function fillSelect(select, devices, fallbackLabel) {
+function fillSelect(select, devices, fallbackLabel, savedValue) {
   const selected = select.value;
   select.replaceChildren();
 
@@ -178,9 +169,21 @@ function fillSelect(select, devices, fallbackLabel) {
     select.append(new Option(label, device.deviceId));
   });
 
-  if ([...select.options].some((option) => option.value === selected)) {
+  const values = [...select.options].map((option) => option.value);
+  if (!selected && savedValue !== undefined && values.includes(savedValue)) {
+    select.value = savedValue;
+  } else if (values.includes(selected)) {
     select.value = selected;
+  } else if (savedValue !== undefined && values.includes(savedValue)) {
+    select.value = savedValue;
   }
+}
+
+function savedDeviceValue(select, savedValue) {
+  if (!savedValue) return "";
+  const values = [...select.options].map((option) => option.value);
+  const hasKnownDevices = values.some((value) => value !== "");
+  return !hasKnownDevices || values.includes(savedValue) ? savedValue : "";
 }
 
 function updateInputControls() {
@@ -196,6 +199,63 @@ function postParams() {
     gain: Number(gainControl.value),
     modelId: Number(modelSelect.value),
   });
+}
+
+function loadSettings() {
+  try {
+    const raw = window.localStorage?.getItem(settingsKey);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch (error) {
+    console.warn("settings load failed", error);
+    return {};
+  }
+}
+
+function saveSettings() {
+  savedSettings = {
+    source: inputSourceSelect.value,
+    inputDeviceId: inputSelect.value,
+    outputDeviceId: outputSelect.value,
+    modelId: modelSelect.value,
+    wet: wetControl.value,
+    outputGain: gainControl.value,
+    enabled: enabledToggle.checked,
+  };
+
+  try {
+    window.localStorage?.setItem(settingsKey, JSON.stringify(savedSettings));
+  } catch (error) {
+    console.warn("settings save failed", error);
+  }
+}
+
+function restoreStaticSettings() {
+  if (selectHasValue(inputSourceSelect, savedSettings.source)) {
+    inputSourceSelect.value = savedSettings.source;
+  }
+  if (selectHasValue(modelSelect, savedSettings.modelId)) {
+    modelSelect.value = savedSettings.modelId;
+  }
+  if (isNumberInRange(savedSettings.wet, wetControl.min, wetControl.max)) {
+    wetControl.value = savedSettings.wet;
+  }
+  const savedGain = savedSettings.outputGain ?? savedSettings.gain;
+  if (isNumberInRange(savedGain, gainControl.min, gainControl.max)) {
+    gainControl.value = savedGain;
+  }
+  if (typeof savedSettings.enabled === "boolean") {
+    enabledToggle.checked = savedSettings.enabled;
+  }
+}
+
+function selectHasValue(select, value) {
+  return value !== undefined && [...select.options].some((option) => option.value === value);
+}
+
+function isNumberInRange(value, min, max) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= Number(min) && number <= Number(max);
 }
 
 function loadWasmBytes() {
@@ -247,7 +307,7 @@ async function createInputStream(inputSource) {
     return createTabAudioStream();
   }
 
-  const inputDeviceId = inputSelect.value;
+  const inputDeviceId = inputSelect.value || savedDeviceValue(inputSelect, savedSettings.inputDeviceId);
   return navigator.mediaDevices.getUserMedia({
     audio: {
       deviceId: inputDeviceId ? { exact: inputDeviceId } : undefined,
@@ -316,7 +376,7 @@ async function connectOutputRoute() {
 
   disconnectOutputRoute();
 
-  const outputDeviceId = outputSelect.value;
+  const outputDeviceId = outputSelect.value || savedDeviceValue(outputSelect, savedSettings.outputDeviceId);
   if (!outputDeviceId || typeof audioContext.setSinkId === "function") {
     if (typeof audioContext.setSinkId === "function") {
       await audioContext.setSinkId(outputDeviceId);
@@ -393,11 +453,24 @@ startButton.addEventListener("click", () => {
   });
 });
 stopButton.addEventListener("click", stopDemo);
-enabledToggle.addEventListener("input", postParams);
-wetControl.addEventListener("input", postParams);
-gainControl.addEventListener("input", postParams);
-modelSelect.addEventListener("input", postParams);
+wetControl.addEventListener("input", () => {
+  saveSettings();
+  postParams();
+});
+gainControl.addEventListener("input", () => {
+  saveSettings();
+  postParams();
+});
+enabledToggle.addEventListener("input", () => {
+  saveSettings();
+  postParams();
+});
+modelSelect.addEventListener("input", () => {
+  saveSettings();
+  postParams();
+});
 inputSelect.addEventListener("change", () => {
+  saveSettings();
   if (!workletNode) return;
   startDemo().catch((error) => {
     console.error(error);
@@ -406,6 +479,7 @@ inputSelect.addEventListener("change", () => {
   });
 });
 outputSelect.addEventListener("change", async () => {
+  saveSettings();
   if (!workletNode) return;
   connectOutputRoute().catch((error) => {
     console.error(error);
@@ -414,6 +488,7 @@ outputSelect.addEventListener("change", async () => {
   });
 });
 inputSourceSelect.addEventListener("change", () => {
+  saveSettings();
   updateInputControls();
   if (!workletNode) return;
   startDemo().catch((error) => {

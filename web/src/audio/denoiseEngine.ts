@@ -1,3 +1,4 @@
+import { getAutoInputGainLinear } from "./audioInputBoost";
 import { ASSET_VERSION, INPUT_SOURCES, type InputSource } from "./const";
 
 export interface DenoiseParams {
@@ -51,10 +52,12 @@ export class DenoiseEngine {
   private audioContext: AudioContext | null = null;
   private mediaStream: MediaStream | null = null;
   private sourceNode: MediaStreamAudioSourceNode | null = null;
+  private inputGainNode: GainNode | null = null;
   private workletNode: AudioWorkletNode | null = null;
   private destinationNode: MediaStreamAudioDestinationNode | null = null;
   private meterRaf: number | null = null;
   private wasmBytesPromise: Promise<ArrayBuffer> | null = null;
+  private audioInputs: MediaDeviceInfo[] = [];
 
   constructor(callbacks: EngineCallbacks, initial: EngineInitialState) {
     this.callbacks = callbacks;
@@ -85,8 +88,9 @@ export class DenoiseEngine {
 
   async enumerateDevices(): Promise<void> {
     const devices = await navigator.mediaDevices.enumerateDevices();
+    this.audioInputs = devices.filter((device) => device.kind === "audioinput");
     this.callbacks.onDevices({
-      inputs: devices.filter((device) => device.kind === "audioinput"),
+      inputs: this.audioInputs,
       outputs: devices.filter((device) => device.kind === "audiooutput"),
       canSelectOutput: this.canSelectOutputDevice(),
     });
@@ -179,7 +183,20 @@ export class DenoiseEngine {
     });
     this.workletNode.port.onmessage = (event) => this.handleWorkletMessage(event);
 
-    this.sourceNode.connect(this.workletNode);
+    // iOS built-in mics capture very quietly; boost them before denoising.
+    // Returns 1 (no boost) off Apple mobile or for external inputs.
+    const inputBoost =
+      inputSource === INPUT_SOURCES.microphone
+        ? getAutoInputGainLinear(this.mediaStream, this.inputDeviceId, this.audioInputs)
+        : 1;
+    if (inputBoost !== 1) {
+      this.inputGainNode = this.audioContext.createGain();
+      this.inputGainNode.gain.value = inputBoost;
+      this.sourceNode.connect(this.inputGainNode);
+      this.inputGainNode.connect(this.workletNode);
+    } else {
+      this.sourceNode.connect(this.workletNode);
+    }
     await this.connectOutputRoute();
 
     // Drive scope/meter updates off the display refresh so the waterfall
@@ -315,11 +332,13 @@ export class DenoiseEngine {
       this.meterRaf = null;
     }
     if (this.sourceNode) this.sourceNode.disconnect();
+    if (this.inputGainNode) this.inputGainNode.disconnect();
     this.disconnectOutputRoute();
     if (this.mediaStream) this.mediaStream.getTracks().forEach((track) => track.stop());
     if (this.audioContext) void this.audioContext.close();
 
     this.sourceNode = null;
+    this.inputGainNode = null;
     this.workletNode = null;
     this.destinationNode = null;
     this.mediaStream = null;

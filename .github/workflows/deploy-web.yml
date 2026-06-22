@@ -31,23 +31,32 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y emscripten
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: web
+
       - name: Build WebAssembly
-        run: make -C web clean all
+        run: npm run build:wasm
+        working-directory: web
+
+      - name: Build web
+        run: npm run build
+        working-directory: web
 
       - name: Prepare Pages artifact
-        run: |
-          mkdir -p _site
-          cp web/index.html _site/
-          cp web/styles.css _site/
-          cp web/app.js _site/
-          cp web/denoise-worklet.js _site/
-          cp web/denoise.wasm _site/
-          touch _site/.nojekyll
+        run: touch web/dist/.nojekyll
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: _site
+          path: web/dist
 
   deploy:
     needs: build

@@ -1,90 +1,16 @@
 <!doctype html>
 <html lang="ja">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>HamNoise</title>
-    <meta name="description" content="Neural network noise reduction for ham radio, supporting CW and voice modes such as SSB.">
-    <link rel="stylesheet" href="./styles.css">
+    <meta
+      name="description"
+      content="Neural network noise reduction for ham radio, supporting CW and voice modes such as SSB."
+    />
   </head>
   <body>
-    <main class="app-shell">
-      <section class="topbar">
-        <div>
-          <h1>HamNoise</h1>
-          <a class="repo-link" href="https://github.com/e04/HamNoise">github.com/e04/HamNoise</a>
-        </div>
-        <div class="status-pill" id="status">idle</div>
-      </section>
-
-      <section class="controls">
-        <label>
-          <span>Source</span>
-          <select id="inputSource">
-            <option value="microphone">Microphone</option>
-            <option value="browser-tab">Browser tab</option>
-          </select>
-        </label>
-        <label>
-          <span>Input</span>
-          <select id="inputDevice"></select>
-        </label>
-        <label>
-          <span>Output</span>
-          <select id="outputDevice"></select>
-        </label>
-        <div class="button-row">
-          <button id="startButton" type="button">Start</button>
-          <button id="stopButton" type="button" disabled>Stop</button>
-        </div>
-      </section>
-
-      <section class="processing">
-        <label>
-          <span>Model</span>
-          <select id="modelSelect">
-            <option value="0">CW</option>
-            <option value="1">Voice</option>
-          </select>
-        </label>
-        <label>
-          <span>Wet</span>
-          <input id="wetControl" type="range" min="0" max="1" step="0.01" value="1">
-        </label>
-        <label>
-          <span>Output gain</span>
-          <input id="gainControl" type="range" min="0" max="2" step="0.01" value="1">
-        </label>
-        <label class="toggle">
-          <input id="enabledToggle" type="checkbox" checked>
-          <span>Enable</span>
-        </label>
-      </section>
-
-      <section class="meters" aria-label="meters">
-        <div>
-          <div class="meter-label"><span>Input level</span></div>
-          <div class="meter"><div id="inputMeter"></div></div>
-        </div>
-        <div>
-          <div class="meter-label"><span>Output level</span></div>
-          <div class="meter"><div id="outputMeter"></div></div>
-        </div>
-        <div class="scope-grid" aria-label="waterfall scopes">
-          <div class="scope">
-            <div class="scope-label"><span>Original</span><span>0-4.8 kHz</span></div>
-            <canvas id="inputScope" width="720" height="180" aria-label="original waterfall scope"></canvas>
-          </div>
-          <div class="scope">
-            <div class="scope-label"><span>Denoised</span><span>0-4.8 kHz</span></div>
-            <canvas id="outputScope" width="720" height="180" aria-label="denoised waterfall scope"></canvas>
-          </div>
-        </div>
-      </section>
-
-      <audio id="monitor" autoplay playsinline></audio>
-    </main>
-
-    <script type="module" src="./app.js"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

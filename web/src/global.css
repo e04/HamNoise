@@ -1,0 +1,26 @@
+body {
+  background: var(--mantine-color-dark-8);
+  font-family: "Roboto Mono", monospace;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#root,
+#root * {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.scope-shell {
+  position: relative;
+  width: 100%;
+}
+
+.scope-shell canvas {
+  display: block;
+  width: 100%;
+  height: 180px;
+  border-radius: 4px;
+  background: #05070a;
+  image-rendering: pixelated;
+}

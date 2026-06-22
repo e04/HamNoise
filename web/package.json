@@ -1,0 +1,39 @@
+{
+  "name": "hamnoise-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build:wasm": "emcc -O3 -std=c11 -I../core/include -I../core/generated wasm/denoise_web.c ../core/src/denoise_audio.c ../core/src/denoise_gru.c --no-entry -Wl,--export=denoise_web_init -Wl,--export=denoise_web_reset -Wl,--export=denoise_web_input_ptr -Wl,--export=denoise_web_output_ptr -Wl,--export=denoise_web_gains_ptr -Wl,--export=denoise_web_set_model -Wl,--export=denoise_web_process_hop -Wl,--export=denoise_web_sample_rate -Wl,--export=denoise_web_hop_length -Wl,--export=denoise_web_input_bins -s STANDALONE_WASM=1 -s ERROR_ON_UNDEFINED_SYMBOLS=0 -o public/denoise.wasm",
+    "clean:wasm": "rm -f public/denoise.wasm",
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@fontsource/doto": "^5.2.10",
+    "@fontsource/roboto-mono": "^5.2.8",
+    "@mantine/core": "^8.2.7",
+    "@mantine/hooks": "^8.2.7",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.33.0",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^5.0.0",
+    "eslint": "^9.33.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.20",
+    "globals": "^16.3.0",
+    "postcss": "^8.5.6",
+    "postcss-preset-mantine": "^1.18.0",
+    "postcss-simple-vars": "^7.0.1",
+    "typescript": "~5.8.3",
+    "typescript-eslint": "^8.39.1",
+    "vite": "^7.1.2"
+  }
+}

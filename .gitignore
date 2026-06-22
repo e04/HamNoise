@@ -13,3 +13,5 @@ sdkconfig.old
 
 rp2350/board/
 rp2350/*.md
+
+pamphlet/

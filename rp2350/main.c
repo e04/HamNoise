@@ -14,73 +14,44 @@
 #include "pico/stdlib.h"
 #include "pico/time.h"
 
-#ifndef APP_ADC_GPIO
+/* RP2350 runtime configuration: change these constants for your board/wiring. */
 #define APP_ADC_GPIO 26
-#endif
 
-#ifndef APP_ADC_INPUT
 #if APP_ADC_GPIO >= 40
 #define APP_ADC_INPUT (APP_ADC_GPIO - 40)
 #else
 #define APP_ADC_INPUT (APP_ADC_GPIO - 26)
 #endif
-#endif
 
-#ifndef APP_PWM_GPIO
 #define APP_PWM_GPIO 15
-#endif
 
-#ifndef APP_BUTTON_GPIO
-#define APP_BUTTON_GPIO -1
-#endif
+#define APP_BUTTON_GPIO 14
 
-#ifndef APP_LED_GPIO
-#ifdef PICO_DEFAULT_LED_PIN
-#define APP_LED_GPIO PICO_DEFAULT_LED_PIN
-#else
-#define APP_LED_GPIO -1
-#endif
-#endif
+#define APP_LED_GPIO 12
 
-#ifndef APP_INPUT_GAIN
 #define APP_INPUT_GAIN 1.0f
-#endif
 
-#ifndef APP_OUTPUT_GAIN
 #define APP_OUTPUT_GAIN 1.0f
-#endif
 
-#ifndef APP_ADC_MIDPOINT
 #define APP_ADC_MIDPOINT 2048.0f
-#endif
 
-#ifndef APP_DC_BLOCK_ALPHA
 #define APP_DC_BLOCK_ALPHA 0.995f
-#endif
 
-#ifndef APP_PWM_WRAP
 #define APP_PWM_WRAP 2047u
-#endif
 
-#ifndef APP_DEBUG_LOG
 #define APP_DEBUG_LOG 0
-#endif
 
-#ifndef APP_DEBUG_INTERVAL_MS
 #define APP_DEBUG_INTERVAL_MS 1000u
-#endif
 
-#ifndef APP_LED_PWM_WRAP
+#define APP_BUTTON_DEBOUNCE_MS 50u
+
+#define APP_BUTTON_LONG_PRESS_MS 500u
+
 #define APP_LED_PWM_WRAP 255u
-#endif
 
-#ifndef APP_LED_CW_BLINK_MS
 #define APP_LED_CW_BLINK_MS 500u
-#endif
 
-#ifndef APP_LED_VOICE_SINE_PERIOD_MS
 #define APP_LED_VOICE_SINE_PERIOD_MS 1200u
-#endif
 
 #define APP_INPUT_BLOCKS 3u
 #define APP_OUTPUT_BLOCKS 4u
@@ -101,6 +72,10 @@
 #error "APP_LED_VOICE_SINE_PERIOD_MS must be greater than zero"
 #endif
 
+#if APP_BUTTON_LONG_PRESS_MS <= APP_BUTTON_DEBOUNCE_MS
+#error "APP_BUTTON_LONG_PRESS_MS must be greater than APP_BUTTON_DEBOUNCE_MS"
+#endif
+
 typedef enum {
     APP_MODE_OFF = 0,
     APP_MODE_CW,
@@ -110,6 +85,7 @@ typedef enum {
 
 static denoise_stream_t s_stream;
 static app_mode_t s_mode = APP_MODE_OFF;
+static app_mode_t s_selected_mode = APP_MODE_CW;
 
 #if APP_LED_GPIO >= 0
 static bool s_led_available;
@@ -502,6 +478,9 @@ static void app_set_mode(app_mode_t mode)
     if (mode >= APP_MODE_COUNT || mode == s_mode) {
         return;
     }
+    if (mode != APP_MODE_OFF) {
+        s_selected_mode = mode;
+    }
     s_mode = mode;
     denoise_stream_reset(&s_stream);
     app_update_led();
@@ -510,17 +489,60 @@ static void app_set_mode(app_mode_t mode)
 #endif
 }
 
+static void app_toggle_selected_mode(void)
+{
+    if (s_mode == APP_MODE_OFF) {
+        app_set_mode(s_selected_mode);
+    } else {
+        app_set_mode(APP_MODE_OFF);
+    }
+}
+
+static void app_select_next_mode(void)
+{
+    s_selected_mode = (s_selected_mode == APP_MODE_CW) ? APP_MODE_VOICE : APP_MODE_CW;
+    if (s_mode != APP_MODE_OFF) {
+        app_set_mode(s_selected_mode);
+    }
+#if APP_DEBUG_LOG
+    else {
+        printf("selected mode %s\n", app_mode_name(s_selected_mode));
+    }
+#endif
+}
+
 static void app_update_mode_button(void)
 {
 #if APP_BUTTON_GPIO >= 0
-    static bool previous_pressed = false;
-    static absolute_time_t last_toggle;
-    const bool pressed = gpio_get(APP_BUTTON_GPIO) == 0;
-    if (pressed && !previous_pressed && absolute_time_diff_us(last_toggle, get_absolute_time()) > 200000) {
-        app_set_mode((app_mode_t)((s_mode + 1) % APP_MODE_COUNT));
-        last_toggle = get_absolute_time();
+    static bool stable_pressed = false;
+    static bool last_raw_pressed = false;
+    static bool long_press_handled = false;
+    static absolute_time_t raw_changed_at;
+    static absolute_time_t press_started_at;
+
+    const absolute_time_t now = get_absolute_time();
+    const bool raw_pressed = gpio_get(APP_BUTTON_GPIO) == 0;
+    if (raw_pressed != last_raw_pressed) {
+        last_raw_pressed = raw_pressed;
+        raw_changed_at = now;
     }
-    previous_pressed = pressed;
+
+    if (raw_pressed != stable_pressed &&
+        absolute_time_diff_us(raw_changed_at, now) >= (int64_t)APP_BUTTON_DEBOUNCE_MS * 1000) {
+        stable_pressed = raw_pressed;
+        if (stable_pressed) {
+            press_started_at = now;
+            long_press_handled = false;
+        } else if (!long_press_handled) {
+            app_toggle_selected_mode();
+        }
+    }
+
+    if (stable_pressed && !long_press_handled &&
+        absolute_time_diff_us(press_started_at, now) >= (int64_t)APP_BUTTON_LONG_PRESS_MS * 1000) {
+        app_select_next_mode();
+        long_press_handled = true;
+    }
 #endif
 }
 

@@ -14,22 +14,6 @@ endif()
 
 set(PICO_BOARD pico2 CACHE STRING "RP2350 board target")
 
-set(APP_ADC_GPIO "" CACHE STRING "ADC GPIO, e.g. 26 on RP2350A/Pico 2")
-set(APP_ADC_INPUT "" CACHE STRING "ADC input channel; derived from APP_ADC_GPIO when empty")
-set(APP_PWM_GPIO "" CACHE STRING "PWM output GPIO")
-set(APP_BUTTON_GPIO "" CACHE STRING "Optional active-low denoise toggle button GPIO")
-set(APP_LED_GPIO "" CACHE STRING "Optional mode status LED GPIO")
-set(APP_INPUT_GAIN "" CACHE STRING "Input gain applied after ADC DC blocking")
-set(APP_OUTPUT_GAIN "" CACHE STRING "Output gain applied before PWM conversion")
-set(APP_ADC_MIDPOINT "" CACHE STRING "ADC midpoint used for bipolar conversion")
-set(APP_DC_BLOCK_ALPHA "" CACHE STRING "One-pole DC blocker feedback coefficient")
-set(APP_PWM_WRAP "" CACHE STRING "PWM TOP value")
-set(APP_DEBUG_LOG "" CACHE STRING "Enable USB serial diagnostic logging, 0 or 1")
-set(APP_DEBUG_INTERVAL_MS "" CACHE STRING "Diagnostic logging interval in milliseconds")
-set(APP_LED_PWM_WRAP "" CACHE STRING "LED PWM TOP value")
-set(APP_LED_CW_BLINK_MS "" CACHE STRING "CW mode LED blink state interval in milliseconds")
-set(APP_LED_VOICE_SINE_PERIOD_MS "" CACHE STRING "Voice mode LED sine fade period in milliseconds")
-
 include("${PICO_SDK_PATH}/external/pico_sdk_import.cmake")
 
 project(hamnoise_rp2350 C CXX ASM)
@@ -65,28 +49,6 @@ target_compile_options(hamnoise_rp2350 PRIVATE
     -ffast-math
     -fno-math-errno
 )
-
-foreach(app_define
-    APP_ADC_GPIO
-    APP_ADC_INPUT
-    APP_PWM_GPIO
-    APP_BUTTON_GPIO
-    APP_LED_GPIO
-    APP_INPUT_GAIN
-    APP_OUTPUT_GAIN
-    APP_ADC_MIDPOINT
-    APP_DC_BLOCK_ALPHA
-    APP_PWM_WRAP
-    APP_DEBUG_LOG
-    APP_DEBUG_INTERVAL_MS
-    APP_LED_PWM_WRAP
-    APP_LED_CW_BLINK_MS
-    APP_LED_VOICE_SINE_PERIOD_MS
-)
-    if(NOT "${${app_define}}" STREQUAL "")
-        target_compile_definitions(hamnoise_rp2350 PRIVATE "${app_define}=${${app_define}}")
-    endif()
-endforeach()
 
 target_link_libraries(hamnoise_rp2350 PRIVATE
     pico_stdlib

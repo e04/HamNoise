@@ -9,6 +9,7 @@ import {
 } from "./components/ControlPrimitives";
 import { Meters } from "./components/Meters";
 import { Scopes } from "./components/Scopes";
+import { useScreenWakeLock } from "./hooks/useScreenWakeLock";
 
 const REPO_URL = "https://github.com/e04/HamNoise";
 
@@ -59,6 +60,8 @@ function App() {
   const outputOptions = deviceOptions(devices.outputs, "Default output");
   const isMicrophone = source === INPUT_SOURCES.microphone;
   const modelLabel = MODEL_OPTIONS.find((option) => option.value === modelId)?.label ?? "CW";
+
+  useScreenWakeLock(running);
 
   return (
     <Container size={800} px={0} py={8}>

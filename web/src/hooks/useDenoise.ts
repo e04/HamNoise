@@ -9,7 +9,7 @@ import { INPUT_SOURCES, dbFromRms, meterWidth, type InputSource } from "../audio
 import { usePersistedState } from "./usePersistedState";
 
 const isInputSource = (value: unknown): value is InputSource =>
-  value === INPUT_SOURCES.microphone || value === INPUT_SOURCES.browserTab;
+  value === INPUT_SOURCES.microphone || value === INPUT_SOURCES.audioFile;
 const isString = (value: unknown): value is string => typeof value === "string";
 const isModelId = (value: unknown): value is number => value === 0 || value === 1;
 const isUnitRange = (value: unknown): value is number =>
@@ -29,6 +29,7 @@ export function useDenoise() {
   const [devices, setDevices] = useState<DeviceState>(EMPTY_DEVICES);
   const [inputLevel, setInputLevel] = useState(0);
   const [outputLevel, setOutputLevel] = useState(0);
+  const [inputFile, setInputFile] = useState<File | null>(null);
   const [supported] = useState(() => Boolean(navigator.mediaDevices?.getUserMedia));
 
   const [source, setSource] = usePersistedState<InputSource>(
@@ -67,6 +68,7 @@ export function useDenoise() {
         source,
         inputDeviceId,
         outputDeviceId,
+        inputFile,
         // Denoising is always on; the worklet still expects an `enabled` flag.
         params: { enabled: true, wet, gain, modelId },
       },
@@ -103,6 +105,10 @@ export function useDenoise() {
   }, [inputDeviceId]);
 
   useEffect(() => {
+    engineRef.current?.setInputFile(inputFile);
+  }, [inputFile]);
+
+  useEffect(() => {
     engineRef.current?.setOutputDeviceId(outputDeviceId);
   }, [outputDeviceId]);
 
@@ -126,6 +132,8 @@ export function useDenoise() {
     setSource,
     inputDeviceId,
     setInputDeviceId,
+    inputFileName: inputFile?.name ?? "",
+    setInputFile,
     outputDeviceId,
     setOutputDeviceId,
     modelId,

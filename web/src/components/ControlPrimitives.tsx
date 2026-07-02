@@ -202,6 +202,91 @@ export const AudioSelectControl = ({
   );
 };
 
+interface FileSelectControlProps {
+  label: string;
+  valueLabel: string;
+  onChange: ChangeEventHandler<HTMLInputElement>;
+  disabled?: boolean;
+  style?: CSSProperties;
+}
+
+export const FileSelectControl = ({
+  label,
+  valueLabel,
+  onChange,
+  disabled = false,
+  style,
+}: FileSelectControlProps) => {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [isFocused, setIsFocused] = useState(false);
+
+  return (
+    <>
+      <Button
+        variant="light"
+        radius={4}
+        color="gray"
+        style={style}
+        onClick={() => inputRef.current?.click()}
+        disabled={disabled}
+        onFocusCapture={() => setIsFocused(true)}
+        onBlurCapture={(event) => {
+          if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+          setIsFocused(false);
+        }}
+        styles={{
+          root: {
+            width: "100%",
+            minWidth: 0,
+            height: `${CONTROL_BUTTON_SIZE_PX}px`,
+            padding: "8px",
+            overflow: "hidden",
+            opacity: disabled ? 0.45 : 1,
+            boxShadow: isFocused
+              ? "0 0 0 calc(0.125rem * var(--mantine-scale)) var(--mantine-primary-color-filled)"
+              : undefined,
+          },
+          inner: { height: "100%", width: "100%" },
+          label: { height: "100%", width: "100%" },
+        }}
+      >
+        <Stack
+          gap={0}
+          align="stretch"
+          style={{
+            width: "100%",
+            height: "100%",
+            justifyContent: "space-between",
+            textAlign: "left",
+            overflow: "hidden",
+          }}
+        >
+          <Text size="xs" fw={700} c="gray.4" lh={1.1}>
+            {label}
+          </Text>
+          <Text
+            size="md"
+            fw={700}
+            c="gray.3"
+            lh={1.15}
+            style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+          >
+            {valueLabel}
+          </Text>
+        </Stack>
+      </Button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="audio/*"
+        onChange={onChange}
+        disabled={disabled}
+        style={{ display: "none" }}
+      />
+    </>
+  );
+};
+
 interface SliderControlProps {
   label: string;
   valueLabel: string;

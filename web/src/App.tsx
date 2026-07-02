@@ -3,6 +3,7 @@ import { useDenoise } from "./hooks/useDenoise";
 import { INPUT_SOURCES, MODEL_OPTIONS } from "./audio/const";
 import {
   AudioSelectControl,
+  FileSelectControl,
   SliderControl,
   SquareControlButton,
   type SelectOption,
@@ -12,6 +13,10 @@ import { Scopes } from "./components/Scopes";
 import { useScreenWakeLock } from "./hooks/useScreenWakeLock";
 
 const REPO_URL = "https://github.com/e04/HamNoise";
+const SOURCE_ORDER = [
+  INPUT_SOURCES.microphone,
+  INPUT_SOURCES.audioFile,
+] as const;
 
 function deviceOptions(
   devices: readonly MediaDeviceInfo[],
@@ -32,6 +37,16 @@ function resolveValue(options: readonly SelectOption[], value: string): string {
   return options.some((option) => option.value === value) ? value : "";
 }
 
+function nextSource(source: (typeof SOURCE_ORDER)[number]) {
+  const currentIndex = SOURCE_ORDER.indexOf(source);
+  return SOURCE_ORDER[(currentIndex + 1) % SOURCE_ORDER.length];
+}
+
+function sourceLabel(source: (typeof SOURCE_ORDER)[number]): string {
+  if (source === INPUT_SOURCES.microphone) return "MIC";
+  return "FILE";
+}
+
 function App() {
   const denoise = useDenoise();
   const {
@@ -44,6 +59,8 @@ function App() {
     setSource,
     inputDeviceId,
     setInputDeviceId,
+    inputFileName,
+    setInputFile,
     outputDeviceId,
     setOutputDeviceId,
     modelId,
@@ -59,7 +76,9 @@ function App() {
   const inputOptions = deviceOptions(devices.inputs, "Default input");
   const outputOptions = deviceOptions(devices.outputs, "Default output");
   const isMicrophone = source === INPUT_SOURCES.microphone;
+  const isAudioFile = source === INPUT_SOURCES.audioFile;
   const modelLabel = MODEL_OPTIONS.find((option) => option.value === modelId)?.label ?? "CW";
+  const canStart = supported && (!isAudioFile || Boolean(inputFileName));
 
   useScreenWakeLock(running);
 
@@ -89,7 +108,7 @@ function App() {
                 title="POWER"
                 valueLabel={running ? "ON" : "OFF"}
                 onClick={running ? stop : start}
-                disabled={!supported}
+                disabled={!canStart}
                 color={running ? "green" : "red"}
                 borderStyle={
                   running
@@ -99,12 +118,8 @@ function App() {
               />
               <SquareControlButton
                 title="SOURCE"
-                valueLabel={isMicrophone ? "MIC" : "TAB"}
-                onClick={() =>
-                  setSource(
-                    isMicrophone ? INPUT_SOURCES.browserTab : INPUT_SOURCES.microphone,
-                  )
-                }
+                valueLabel={sourceLabel(source)}
+                onClick={() => setSource(nextSource(source))}
               />
               <SquareControlButton
                 title="MODEL"
@@ -114,14 +129,27 @@ function App() {
             </Flex>
 
             <Flex gap="sm" wrap="wrap">
-              <AudioSelectControl
-                style={{ flex: "1 1 240px" }}
-                label="INPUT"
-                data={inputOptions}
-                value={resolveValue(inputOptions, inputDeviceId)}
-                onChange={(event) => setInputDeviceId(event.currentTarget.value)}
-                disabled={!isMicrophone}
-              />
+              {isAudioFile ? (
+                <FileSelectControl
+                  style={{ flex: "1 1 240px" }}
+                  label="INPUT"
+                  valueLabel={inputFileName || "Choose file"}
+                  onChange={(event) => {
+                    const file = event.currentTarget.files?.[0] ?? null;
+                    if (file) setInputFile(file);
+                    event.currentTarget.value = "";
+                  }}
+                />
+              ) : (
+                <AudioSelectControl
+                  style={{ flex: "1 1 240px" }}
+                  label="INPUT"
+                  data={inputOptions}
+                  value={resolveValue(inputOptions, inputDeviceId)}
+                  onChange={(event) => setInputDeviceId(event.currentTarget.value)}
+                  disabled={!isMicrophone}
+                />
+              )}
               <AudioSelectControl
                 style={{ flex: "1 1 240px" }}
                 label="OUTPUT"

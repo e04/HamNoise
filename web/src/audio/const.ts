@@ -3,7 +3,7 @@ export const DISPLAY_MAX_FREQUENCY = 4800;
 
 export const INPUT_SOURCES = {
   microphone: "microphone",
-  browserTab: "browser-tab",
+  audioFile: "audio-file",
 } as const;
 
 export type InputSource = (typeof INPUT_SOURCES)[keyof typeof INPUT_SOURCES];

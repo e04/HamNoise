@@ -32,6 +32,7 @@ export interface EngineInitialState {
   source: InputSource;
   inputDeviceId: string;
   outputDeviceId: string;
+  inputFile: File | null;
   params: DenoiseParams;
 }
 
@@ -47,11 +48,14 @@ export class DenoiseEngine {
   private source: InputSource;
   private inputDeviceId: string;
   private outputDeviceId: string;
+  private inputFile: File | null;
   private params: DenoiseParams;
 
   private audioContext: AudioContext | null = null;
   private mediaStream: MediaStream | null = null;
-  private sourceNode: MediaStreamAudioSourceNode | null = null;
+  private sourceNode: MediaStreamAudioSourceNode | MediaElementAudioSourceNode | null = null;
+  private fileElement: HTMLAudioElement | null = null;
+  private fileObjectUrl: string | null = null;
   private inputGainNode: GainNode | null = null;
   private workletNode: AudioWorkletNode | null = null;
   private destinationNode: MediaStreamAudioDestinationNode | null = null;
@@ -64,6 +68,7 @@ export class DenoiseEngine {
     this.source = initial.source;
     this.inputDeviceId = initial.inputDeviceId;
     this.outputDeviceId = initial.outputDeviceId;
+    this.inputFile = initial.inputFile;
     this.params = initial.params;
 
     this.monitor = document.createElement("audio");
@@ -111,6 +116,12 @@ export class DenoiseEngine {
     if (this.inputDeviceId === deviceId) return;
     this.inputDeviceId = deviceId;
     if (this.isRunning) void this.restart();
+  }
+
+  setInputFile(file: File | null): void {
+    if (this.inputFile === file) return;
+    this.inputFile = file;
+    if (this.isRunning && this.source === INPUT_SOURCES.audioFile) void this.restart();
   }
 
   setOutputDeviceId(deviceId: string): void {
@@ -164,17 +175,13 @@ export class DenoiseEngine {
     this.stop();
     const inputSource = this.source;
 
-    this.mediaStream = await this.createInputStream(inputSource);
-    this.addInputEndedHandlers(this.mediaStream);
-    if (inputSource === INPUT_SOURCES.microphone) await this.enumerateDevices();
-
     this.audioContext = new AudioContext({ latencyHint: "playback" });
     const wasmBytes = await this.loadWasmBytes();
     await this.audioContext.audioWorklet.addModule(
       `${import.meta.env.BASE_URL}denoise-worklet.js?v=${ASSET_VERSION}`,
     );
 
-    this.sourceNode = this.audioContext.createMediaStreamSource(this.mediaStream);
+    this.sourceNode = await this.createSourceNode(inputSource, this.audioContext);
     this.workletNode = new AudioWorkletNode(this.audioContext, "denoise-worklet", {
       numberOfInputs: 1,
       numberOfOutputs: 1,
@@ -198,6 +205,7 @@ export class DenoiseEngine {
       this.sourceNode.connect(this.workletNode);
     }
     await this.connectOutputRoute();
+    await this.playInputFileIfNeeded(inputSource);
 
     // Drive scope/meter updates off the display refresh so the waterfall
     // scrolls smoothly instead of jumping ~10 times per second.
@@ -210,11 +218,21 @@ export class DenoiseEngine {
     this.callbacks.onRunningChange(true);
   }
 
-  private async createInputStream(inputSource: InputSource): Promise<MediaStream> {
-    if (inputSource === INPUT_SOURCES.browserTab) {
-      return this.createTabAudioStream();
+  private async createSourceNode(
+    inputSource: InputSource,
+    audioContext: AudioContext,
+  ): Promise<MediaStreamAudioSourceNode | MediaElementAudioSourceNode> {
+    if (inputSource === INPUT_SOURCES.audioFile) {
+      return this.createFileAudioSource(audioContext);
     }
 
+    this.mediaStream = await this.createInputStream();
+    this.addInputEndedHandlers(this.mediaStream);
+    await this.enumerateDevices();
+    return audioContext.createMediaStreamSource(this.mediaStream);
+  }
+
+  private async createInputStream(): Promise<MediaStream> {
     const inputDeviceId = this.inputDeviceId;
     return navigator.mediaDevices.getUserMedia({
       audio: {
@@ -227,32 +245,27 @@ export class DenoiseEngine {
     });
   }
 
-  private async createTabAudioStream(): Promise<MediaStream> {
-    if (typeof navigator.mediaDevices.getDisplayMedia !== "function") {
-      throw new Error("tab audio capture unavailable");
+  private async createFileAudioSource(
+    audioContext: AudioContext,
+  ): Promise<MediaElementAudioSourceNode> {
+    if (!this.inputFile) {
+      throw new Error("no audio file selected");
     }
 
-    const stream = await navigator.mediaDevices.getDisplayMedia({
-      audio: {
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false,
-        channelCount: 1,
-      },
-      video: true,
-      // Non-standard hints honored by Chromium for tab/system audio capture.
-      preferCurrentTab: false,
-      selfBrowserSurface: "exclude",
-      systemAudio: "include",
-      surfaceSwitching: "include",
-    } as DisplayMediaStreamOptions);
+    this.fileObjectUrl = URL.createObjectURL(this.inputFile);
+    this.fileElement = document.createElement("audio");
+    this.fileElement.src = this.fileObjectUrl;
+    this.fileElement.loop = true;
+    this.fileElement.preload = "auto";
+    this.fileElement.setAttribute("playsinline", "");
 
-    if (stream.getAudioTracks().length === 0) {
-      stream.getTracks().forEach((track) => track.stop());
-      throw new Error("no tab audio shared");
-    }
+    const sourceNode = audioContext.createMediaElementSource(this.fileElement);
+    return sourceNode;
+  }
 
-    return stream;
+  private async playInputFileIfNeeded(inputSource: InputSource): Promise<void> {
+    if (inputSource !== INPUT_SOURCES.audioFile) return;
+    await this.fileElement?.play();
   }
 
   private addInputEndedHandlers(stream: MediaStream): void {
@@ -335,6 +348,7 @@ export class DenoiseEngine {
     if (this.inputGainNode) this.inputGainNode.disconnect();
     this.disconnectOutputRoute();
     if (this.mediaStream) this.mediaStream.getTracks().forEach((track) => track.stop());
+    this.stopFileElement();
     if (this.audioContext) void this.audioContext.close();
 
     this.sourceNode = null;
@@ -346,6 +360,19 @@ export class DenoiseEngine {
     this.monitor.srcObject = null;
 
     this.callbacks.onRunningChange(false);
+  }
+
+  private stopFileElement(): void {
+    if (this.fileElement) {
+      this.fileElement.pause();
+      this.fileElement.removeAttribute("src");
+      this.fileElement.load();
+      this.fileElement = null;
+    }
+    if (this.fileObjectUrl) {
+      URL.revokeObjectURL(this.fileObjectUrl);
+      this.fileObjectUrl = null;
+    }
   }
 
   dispose(): void {
